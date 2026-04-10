@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ロカボ ダッシュボード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --green-dark:  #1a3320;
+    --green-mid:   #2d5a3d;
+    --green-light: #4a8c5c;
+    --green-pale:  #e8f5ec;
+    --amber:       #c17f24;
+    --amber-pale:  #fdf3e0;
+    --red:         #c0392b;
+    --red-pale:    #fdecea;
+    --text:        #1a1a1a;
+    --text-sub:    #666;
+    --border:      #e0e8e2;
+    --bg:          #f4f7f5;
+    --card:        #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ヘッダー */
+  .header {
+    background: var(--green-dark);
+    padding: 20px 20px 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-top { display: flex; align-items: center; justify-content: space-between; }
+  .header h1 {
+    font-size: 18px; font-weight: 700;
+    color: #fff; letter-spacing: 0.02em;
+  }
+  .header-sub {
+    font-size: 11px; color: rgba(255,255,255,0.55);
+    margin-top: 3px; font-family: 'DM Mono', monospace;
+  }
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4a8c5c;
+    box-shadow: 0 0 0 0 rgba(74,140,92,0.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(74,140,92,0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(74,140,92,0); }
+    100% { box-shadow: 0 0 0 0 rgba(74,140,92,0); }
+  }
+
+  .wrap { padding: 16px; max-width: 640px; margin: 0 auto; }
+
+  /* 入力エリア */
+  .paste-card {
+    background: var(--card);
+    border: 1.5px dashed var(--green-light);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .paste-label {
+    font-size: 12px; font-weight: 700;
+    color: var(--green-mid); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .paste-label::before {
+    content: ''; display: inline-block;
+    width: 4px; height: 14px;
+    background: var(--green-light); border-radius: 2px;
+  }
+  textarea {
+    width: 100%; height: 120px; max-height: 120px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text);
+    background: var(--bg);
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+    overflow-y: auto;
+    display: block;
+  }
+  textarea:focus { border-color: var(--green-light); }
+  .parse-btn {
+    width: 100%; margin-top: 10px;
+    background: var(--green-mid);
+    color: #fff; border: none;
+    border-radius: 10px; padding: 12px;
+    font-size: 14px; font-weight: 700;
+    font-family: 'Noto Sans JP', sans-serif;
+    cursor: pointer; transition: background 0.2s;
+  }
+  .parse-btn:hover { background: var(--green-dark); }
+
+  /* サマリーカード */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 10px; margin-bottom: 14px;
+  }
+  .scard {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 14px 10px 12px;
+    text-align: center;
+    border: 1px solid var(--border);
+    transition: transform 0.15s;
+  }
+  .scard:active { transform: scale(0.97); }
+  .scard-label { font-size: 10px; color: var(--text-sub); margin-bottom: 5px; font-weight: 500; }
+  .scard-val {
+    font-size: 24px; font-weight: 700;
+    font-family: 'DM Mono', monospace;
+    line-height: 1;
+  }
+  .scard-unit { font-size: 10px; color: var(--text-sub); margin-top: 2px; }
+  .scard-badge {
+    display: inline-block; margin-top: 5px;
+    font-size: 9px; font-weight: 700;
+    padding: 2px 7px; border-radius: 20px;
+  }
+  .good  { color: #1a7a40; }
+  .warn  { color: var(--amber); }
+  .bad   { color: var(--red); }
+  .badge-good { background: var(--green-pale); color: #1a7a40; }
+  .badge-warn { background: var(--amber-pale); color: var(--amber); }
+  .badge-bad  { background: var(--red-pale);   color: var(--red); }
+
+  /* グラフセクション */
+  .section {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+  }
+  .section-title {
+    font-size: 13px; font-weight: 700;
+    color: var(--green-dark); margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .section-title::before {
+    content: ''; display: inline-block;
+    width: 4px; height: 14px;
+    background: var(--green-light); border-radius: 2px;
+  }
+
+  .tabs {
+    display: flex; gap: 6px;
+    overflow-x: auto; padding-bottom: 10px;
+    margin-bottom: 12px;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    cursor: pointer; color: var(--text-sub);
+    transition: all 0.15s;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  .tab.active {
+    background: var(--green-dark);
+    color: #fff; border-color: var(--green-dark);
+  }
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* ロカボ達成率バー */
+  .streak-row {
+    display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px;
+  }
+  .day-dot {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; font-family: 'DM Mono', monospace;
+    color: #fff;
+  }
+  .dot-great  { background: #1a7a40; }
+  .dot-good   { background: #4a8c5c; }
+  .dot-warn   { background: var(--amber); }
+  .dot-bad    { background: var(--red); }
+  .dot-none   { background: #ddd; color: #aaa; }
+
+  /* 空状態 */
+  .empty {
+    text-align: center; padding: 50px 20px;
+    color: var(--text-sub); font-size: 14px;
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* 週次統計 */
+  .stat-row {
+    display: flex; gap: 10px; margin-top: 4px;
+  }
+  .stat-item {
+    flex: 1; background: var(--bg);
+    border-radius: 10px; padding: 10px;
+    text-align: center;
+  }
+  .stat-val { font-size: 18px; font-weight: 700; font-family: 'DM Mono', monospace; }
+  .stat-label { font-size: 10px; color: var(--text-sub); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <h1>シン・シン・ロカボ</h1>
+      <div class="header-sub" id="header-sub">Googleドキュメントのログを貼り付けてください</div>
+    </div>
+    <div class="pulse"></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- 貼り付けエリア -->
+  <div class="paste-card">
+    <div class="paste-label">ログデータを貼り付け</div>
+    <textarea id="log-input" placeholder="Googleドキュメント「ロカボログ」の内容をここにコピペしてください。
+
+---
+
+## 2026-04-04
+純糖質 : 63.1g ...
+（以降のデータも一括でOK）"></textarea>
+    <button class="parse-btn" onclick="parseAndRender()">グラフを表示する</button>
+  </div>
+
+  <!-- メインコンテンツ -->
+  <div id="content"></div>
+
+</div>
+
+<script>
+let allData = [];
+let chartInstance = null;
+
+const CHART_CFG = {
+  carbs:    { label: '純糖質 (g)',        color: '#1a7a40', threshold: 130, thresholdLabel: '目標130g' },
+  fat:      { label: '脂質 (g)',          color: '#2980b9', threshold: null },
+  protein:  { label: 'タンパク質 (g)',    color: '#8e44ad', threshold: null },
+  kcal:     { label: '摂取カロリー(kcal)', color: '#7f8c8d', threshold: null },
+  steps:    { label: '歩数',              color: '#6c5ce7', threshold: 10000, thresholdLabel: '1万歩' },
+  heartRate:{ label: '安静時心拍 (bpm)',  color: '#e17055', threshold: 60,   thresholdLabel: '60bpm' },
+  sleep:    { label: '睡眠時間 (h)',      color: '#c17f24', threshold: 7,    thresholdLabel: '7時間' },
+};
+
+function parseLog(text) {
+  // --- でもH2見出しでも日付行でも分割できる汎用パーサー
+  // まず日付行（YYYY-MM-DD）の位置でブロックに分割する
+  const lines = text.split('\n');
+  const blocks = [];
+  let current = null;
+
+  lines.forEach(line => {
+    const dateM = line.match(/(\d{4}-\d{2}-\d{2})/);
+    if (dateM) {
+      if (current) blocks.push(current);
+      current = { date: dateM[1], lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
+    }
+  });
+  if (current) blocks.push(current);
+
+  const results = [];
+  const seen = new Set();
+
+  blocks.forEach(({ date, lines }) => {
+    if (seen.has(date)) return; // 重複日付をスキップ
+    seen.add(date);
+
+    const block = lines.join('\n');
+    const num = (pattern) => {
+      const m = block.match(pattern);
+      return m ? parseFloat(m[1].replace(/,/g, '')) : null;
+    };
+
+    results.push({
+      date,
+      pureCarbs:  num(/純糖質\s*[:\uff1a]\s*([\d.]+)/),
+      protein:    num(/タンパク質\s*[:\uff1a]\s*([\d.]+)/),
+      fat:        num(/脂質\s*[:\uff1a]\s*([\d.]+)/),
+      kcal:       num(/摂取カロリー\s*[:\uff1a]\s*([\d,]+)/),
+      steps:      num(/歩数\s*[:\uff1a]\s*([\d,]+)/),
+      distance:   num(/\s([\d.]+)km/),
+      heartRate:  num(/安静時心拍\s*[:\uff1a]\s*([\d.]+)/),
+      sleepHours: num(/睡眠\s*[:\uff1a]\s*([\d.]+)/),
+    });
+  });
+
+  return results.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function parseAndRender() {
+  const text = document.getElementById('log-input').value.trim();
+  if (!text) return;
+
+  allData = parseLog(text);
+
+  if (allData.length === 0) {
+    document.getElementById('content').innerHTML =
+      `<div class="empty"><div class="empty-icon">🔍</div>データを認識できませんでした。<br>ドキュメントの内容をそのまま貼り付けてください。</div>`;
+    return;
+  }
+
+  const latest = allData[allData.length - 1];
+  document.getElementById('header-sub').textContent =
+    `最終記録: ${latest.date}　全${allData.length}日分`;
+
+  renderContent();
+}
+
+function renderContent() {
+  const latest = allData[allData.length - 1];
+  const avg7 = (key) => {
+    const slice = allData.slice(-7).map(d => d[key]).filter(v => v != null);
+    return slice.length ? (slice.reduce((a,b) => a+b, 0) / slice.length) : null;
+  };
+
+  const carbsClass  = latest.pureCarbs <= 80 ? 'good' : latest.pureCarbs <= 130 ? 'warn' : 'bad';
+  const carbsLabel  = latest.pureCarbs <= 80 ? '完全脂質起動圏' : latest.pureCarbs <= 130 ? 'ロカボ達成' : '要改善';
+  const hrClass     = latest.heartRate  <= 50 ? 'good' : latest.heartRate <= 60 ? 'good' : 'warn';
+  const hrLabel     = latest.heartRate  <= 50 ? 'アスリート域' : latest.heartRate <= 60 ? '良好' : '標準';
+  const sleepClass  = latest.sleepHours >= 7  ? 'good' : latest.sleepHours >= 6 ? 'warn' : 'bad';
+  const sleepLabel  = latest.sleepHours >= 7  ? '良好' : latest.sleepHours >= 6 ? 'やや短め' : '不足';
+
+  const achievedDays = allData.filter(d => d.pureCarbs != null && d.pureCarbs <= 130).length;
+  const achieveRate  = Math.round(achievedDays / allData.length * 100);
+
+  // ロカボ達成カレンダードット
+  const dots = allData.slice(-28).map(d => {
+    const label = d.date.slice(8);
+    if (d.pureCarbs == null) return `<div class="day-dot dot-none">${label}</div>`;
+    if (d.pureCarbs <= 80)  return `<div class="day-dot dot-great" title="${d.date} ${d.pureCarbs}g">${label}</div>`;
+    if (d.pureCarbs <= 130) return `<div class="day-dot dot-good"  title="${d.date} ${d.pureCarbs}g">${label}</div>`;
+    if (d.pureCarbs <= 160) return `<div class="day-dot dot-warn"  title="${d.date} ${d.pureCarbs}g">${label}</div>`;
+    return `<div class="day-dot dot-bad" title="${d.date} ${d.pureCarbs}g">${label}</div>`;
+  }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="summary-grid">
+      <div class="scard">
+        <div class="scard-label">純糖質（最新）</div>
+        <div class="scard-val ${carbsClass}">${latest.pureCarbs ?? '-'}</div>
+        <div class="scard-unit">g</div>
+        <div class="scard-badge badge-${carbsClass}">${carbsLabel}</div>
+      </div>
+      <div class="scard">
+        <div class="scard-label">安静時心拍</div>
+        <div class="scard-val ${hrClass}">${latest.heartRate ?? '-'}</div>
+        <div class="scard-unit">bpm</div>
+        <div class="scard-badge badge-${hrClass}">${hrLabel}</div>
+      </div>
+      <div class="scard">
+        <div class="scard-label">睡眠</div>
+        <div class="scard-val ${sleepClass}">${latest.sleepHours ? latest.sleepHours.toFixed(1) : '-'}</div>
+        <div class="scard-unit">時間</div>
+        <div class="scard-badge badge-${sleepClass}">${sleepLabel}</div>
+      </div>
+      <div class="scard">
+        <div class="scard-label">歩数（最新）</div>
+        <div class="scard-val good">${latest.steps ? Math.round(latest.steps/1000)+'k' : '-'}</div>
+        <div class="scard-unit">歩</div>
+        <div class="scard-badge badge-good">${latest.distance ? latest.distance+'km' : ''}</div>
+      </div>
+      <div class="scard">
+        <div class="scard-label">ロカボ達成率</div>
+        <div class="scard-val ${achieveRate >= 80 ? 'good' : achieveRate >= 60 ? 'warn' : 'bad'}">${achieveRate}</div>
+        <div class="scard-unit">%</div>
+        <div class="scard-badge badge-${achieveRate >= 80 ? 'good' : achieveRate >= 60 ? 'warn' : 'bad'}">${achievedDays}/${allData.length}日</div>
+      </div>
+      <div class="scard">
+        <div class="scard-label">純糖質7日平均</div>
+        <div class="scard-val ${avg7('pureCarbs') <= 130 ? 'good' : 'warn'}">${avg7('pureCarbs') ? Math.round(avg7('pureCarbs')) : '-'}</div>
+        <div class="scard-unit">g</div>
+        <div class="scard-badge badge-${avg7('pureCarbs') <= 130 ? 'good' : 'warn'}">7日平均</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">脂質起動カレンダー（直近28日）</div>
+      <div style="display:flex;gap:12px;margin-bottom:10px;font-size:11px;color:var(--text-sub);flex-wrap:wrap;">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1a7a40;margin-right:3px;"></span>～80g 完全起動</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4a8c5c;margin-right:3px;"></span>～130g ロカボ</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#c17f24;margin-right:3px;"></span>～160g 惜しい</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#c0392b;margin-right:3px;"></span>160g超 要改善</span>
+      </div>
+      <div class="streak-row">${dots}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">トレンドグラフ</div>
+      <div class="tabs" id="tab-row">
+        <button class="tab active" onclick="switchChart('carbs',this)">純糖質</button>
+        <button class="tab" onclick="switchChart('fat',this)">脂質</button>
+        <button class="tab" onclick="switchChart('protein',this)">タンパク質</button>
+        <button class="tab" onclick="switchChart('kcal',this)">カロリー</button>
+        <button class="tab" onclick="switchChart('steps',this)">歩数</button>
+        <button class="tab" onclick="switchChart('heartRate',this)">心拍</button>
+        <button class="tab" onclick="switchChart('sleep',this)">睡眠</button>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="mainChart"></canvas>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">週次サマリー</div>
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="stat-val good">${avg7('pureCarbs') ? Math.round(avg7('pureCarbs')) : '-'}g</div>
+          <div class="stat-label">純糖質 7日平均</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-val" style="color:#2980b9">${avg7('fat') ? Math.round(avg7('fat')) : '-'}g</div>
+          <div class="stat-label">脂質 7日平均</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-val" style="color:#e17055">${avg7('heartRate') ? Math.round(avg7('heartRate')) : '-'}bpm</div>
+          <div class="stat-label">心拍 7日平均</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  renderChart('carbs');
+}
+
+function switchChart(key, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderChart(key);
+}
+
+function renderChart(key) {
+  const cfg = CHART_CFG[key];
+  const labels = allData.map(d => d.date.slice(5));
+  const values = allData.map(d => d[key === 'carbs' ? 'pureCarbs' : key === 'sleep' ? 'sleepHours' : key]);
+
+  if (chartInstance) chartInstance.destroy();
+
+  const datasets = [{
+    label: cfg.label,
+    data: values,
+    borderColor: cfg.color,
+    backgroundColor: cfg.color + '18',
+    fill: true,
+    tension: 0.35,
+    pointRadius: allData.length <= 14 ? 5 : 3,
+    pointHoverRadius: 7,
+    pointBackgroundColor: cfg.color,
+  }];
+
+  if (cfg.threshold) {
+    datasets.push({
+      label: cfg.thresholdLabel,
+      data: Array(labels.length).fill(cfg.threshold),
+      borderColor: '#bbb',
+      borderWidth: 1,
+      borderDash: [5, 5],
+      pointRadius: 0,
+      fill: false,
+    });
+  }
+
+  chartInstance = new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y} ${cfg.label.match(/\((.+)\)/) ? cfg.label.match(/\((.+)\)/)[1] : ''}`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { color: '#f0f0f0' } },
+        y: { ticks: { font: { size: 10 } }, grid: { color: '#f0f0f0' } },
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
